@@ -1,0 +1,1 @@
+# hibernateOGM-HBase

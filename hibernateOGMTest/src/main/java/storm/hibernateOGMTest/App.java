@@ -8,6 +8,7 @@ import javax.transaction.TransactionManager;
 import org.hibernate.ogm.util.impl.Log;
 import org.hibernate.ogm.util.impl.LoggerFactory;
 
+import storm.hibernateOGMTest.domain.Boy;
 import storm.hibernateOGMTest.domain.Breed;
 import storm.hibernateOGMTest.domain.ColumnFaimly1;
 import storm.hibernateOGMTest.domain.ColumnFamily2;
@@ -34,10 +35,12 @@ public class App {
 			tm.begin();
 			// logger.infof( "About to store dog and breed" );
 			EntityManager em = emf.createEntityManager();
+			//mysqlInsertTest(em);
+			em.createNamedQuery("select * from Boy;").getMaxResults();
+			//mysqlQueryTest(em);
 			
-			createTest(em);
-			
-			em.flush();
+			//em.flush();
+			//queryTest(em);
 			em.close();
 			tm.commit();
 		} catch (Exception e) {
@@ -49,7 +52,7 @@ public class App {
 	private static void createTest(EntityManager em){
 		//em.persist(collie);
 		Dog dina = new Dog();
-		dina.setId("4334y-45rtg-43ooo");
+		dina.setId("12-wer-sdfs");
 		dina.setCf1(new ColumnFaimly1("cf1value1","cf1value2", "cf1value3"));
 		dina.setCf2(new ColumnFamily2("cf2value1","cf2value2", "cf2value3"));
 		
@@ -62,12 +65,29 @@ public class App {
 		
 	}
 	private static void queryTest(EntityManager em){
-		Dog b = em.find(Dog.class, "4334y-45rtg-435");
+		Dog b = em.find(Dog.class, "4334y-45rtg-43ooo");
+		//em.createNativeQuery("select * from Dog;").getResultList();
 		
 		if(b == null)
 			System.out.println("dog is null");
 		else 
-			System.out.println(b.getBodyProperty().toString());
+			System.out.println(b.getCf1().getCf1key1());
+	}
+	public static void mysqlInsertTest(EntityManager em){
+		Boy b = new Boy();
+		b.setAdress("北京邮电大学");
+		b.setAge("18");
+		b.setId("fsllddd-ddd");
+		b.setName("boyboy");
+		em.persist(b);
+		
+	}
+	public static void mysqlQueryTest(EntityManager em){
+	System.out.println("mysqlQueryTest start...");
+		Boy b = em.find(Boy.class, "fsllddd-ddd");
+		if(b == null) System.out.println("b == null");
+		System.out.println("-----------" + b.getAdress() + "------------");
+		
 	}
 	
 	public static void reflectTest(){

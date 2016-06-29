@@ -4,4 +4,5 @@ import java.util.Map;
 
 public interface DBBase{
 	public void configureAndInit(Map<String,String> configures);
+	public void configureAndInit();
 }

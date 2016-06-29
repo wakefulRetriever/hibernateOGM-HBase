@@ -1,23 +1,27 @@
 package storm.hibernateOGMTest.domain;
 
+import java.util.UUID;
+
+import javax.persistence.Embeddable;
 import javax.persistence.Entity;
 import javax.persistence.Id;
 
-@Entity
+@Embeddable
 public class ColumnFaimly1 {
 	private String cf1key1;
 	private String cf1key2;
 	private String cf1key3;
 
-	
-	@Id
-	private String id;
-	
-	public ColumnFaimly1(){
-		
+//	@Id
+//	private String id;
+
+	public ColumnFaimly1() {
+
 	}
+
 	public ColumnFaimly1(String cf1key1, String cf1key2, String cf1key3) {
 		super();
+		//this.id = UUID.randomUUID().toString();
 		this.cf1key1 = cf1key1;
 		this.cf1key2 = cf1key2;
 		this.cf1key3 = cf1key3;
@@ -47,12 +51,12 @@ public class ColumnFaimly1 {
 		this.cf1key3 = cf1key3;
 	}
 
-	public String getId() {
-		return id;
-	}
-
-	public void setId(String id) {
-		this.id = id;
-	}
+//	public String getId() {
+//		return id;
+//	}
+//
+//	public void setId(String id) {
+//		this.id = id;
+//	}
 
 }

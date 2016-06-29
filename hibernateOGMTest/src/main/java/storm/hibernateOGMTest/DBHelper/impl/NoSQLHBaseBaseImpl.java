@@ -11,31 +11,19 @@ import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Put;
+
+import storm.hibernateOGMTest.DBHelper.AbstractConfiguredNoSQLHbaseBase;
 import storm.hibernateOGMTest.DBHelper.NoSQLHBaseBase;
 import storm.hibernateOGMTest.DBHelper.NoSQLHBaseTableBase;
 
-public class NoSQLHBaseBaseImpl implements NoSQLHBaseBase {
-	private static final String TEST_HOST = "10.108.209.95";
-	private Configuration mConf = null;
+public class NoSQLHBaseBaseImpl extends AbstractConfiguredNoSQLHbaseBase {
+	
 
 	public NoSQLHBaseBaseImpl() {
 		// TODO Auto-generated constructor stub
 		// configureAndInit(configures);
 		Map<String, String> configures = new HashMap<>();
-		configures.put("host", TEST_HOST);
-		configureAndInit(configures);
-	}
-
-	@Override
-	public void configureAndInit(Map<String, String> configures) {
-		// TODO Auto-generated method stub
-		String ip = configures.get("host");
-		Configuration conf = new Configuration();
-		conf = HBaseConfiguration.create();
-		conf.set("hbase.zookeeper.quorum", ip);
-		// 与hbase/conf/hbase-site.xml中hbase.zookeeper.property.clientPort配置的值相同
-		conf.set("hbase.zookeeper.property.clientPort", "2181");
-		mConf = HBaseConfiguration.create(conf);
+		configureAndInit();
 	}
 
 	@Override
@@ -43,7 +31,7 @@ public class NoSQLHBaseBaseImpl implements NoSQLHBaseBase {
 		// TODO Auto-generated method stub
 		org.apache.hadoop.hbase.client.HBaseAdmin admin = null;
 		try {
-			admin = new org.apache.hadoop.hbase.client.HBaseAdmin(mConf);
+			admin = new org.apache.hadoop.hbase.client.HBaseAdmin(getHbaseConfiguration());
 			if (tableName != null && !admin.tableExists(tableName.getBytes())) {
 				return false;
 			}
@@ -67,13 +55,13 @@ public class NoSQLHBaseBaseImpl implements NoSQLHBaseBase {
 		// TODO Auto-generated method stub
 		org.apache.hadoop.hbase.client.HBaseAdmin admin = null;
 		try {
-			admin = new org.apache.hadoop.hbase.client.HBaseAdmin(mConf);
+			admin = new org.apache.hadoop.hbase.client.HBaseAdmin(getHbaseConfiguration());
 			HTableDescriptor tableDescriptor = new HTableDescriptor(tableName);
 			for (String family : columnFamily)
 				tableDescriptor.addFamily(new HColumnDescriptor(family));
 			admin.createTable(tableDescriptor);
 			admin.close();
-			HTable table = new HTable(mConf, tableName);
+			HTable table = new HTable(getHbaseConfiguration(), tableName);
 			NoSQLHBaseTableBase hbaseTable = new NoSQLHBaseTableBaseImpl(table);
 			
 			return hbaseTable;
@@ -100,7 +88,7 @@ public class NoSQLHBaseBaseImpl implements NoSQLHBaseBase {
 		// TODO Auto-generated method stub
 		HTable table;
 		try {
-			table = new HTable(mConf, tableName);
+			table = new HTable(getHbaseConfiguration(), tableName);
 			NoSQLHBaseTableBase hbaseTable = new NoSQLHBaseTableBaseImpl(table);
 			return hbaseTable;
 			

@@ -1,12 +1,17 @@
 package storm.hibernateOGMTest;
 
+import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
+import org.apache.hadoop.hbase.client.Result;
+import org.hamcrest.core.IsInstanceOf;
 import org.hibernate.LockMode;
 import org.hibernate.dialect.lock.LockingStrategy;
 import org.hibernate.ogm.datastore.infinispan.InfinispanDialect;
@@ -30,15 +35,24 @@ import org.hibernate.ogm.type.spi.GridType;
 import org.hibernate.persister.entity.Lockable;
 import org.hibernate.type.Type;
 
+import storm.hibernateOGMTest.DBHelper.AbstractConfiguredSQLBase;
 import storm.hibernateOGMTest.DBHelper.NoSQLHBaseBase;
 import storm.hibernateOGMTest.DBHelper.NoSQLHBaseTableBase;
+import storm.hibernateOGMTest.DBHelper.SQLBase;
 import storm.hibernateOGMTest.DBHelper.impl.NoSQLHBaseBaseImpl;
+import storm.hibernateOGMTest.DBHelper.impl.SQLBaseImpl;
+import storm.hibernateOGMTest.myannotation.HBase;
+import storm.hibernateOGMTest.myannotation.MySql;
 import storm.hibernateOGMTest.util.JoinedDataHandler;
 
 public class MyGridDialect extends BaseGridDialect {
+	public static final String DOMAIN_PACKAGE_NAME = "packageName";
 	private static NoSQLHBaseBase hbaseAdmin = new NoSQLHBaseBaseImpl();
-	private static final String PACKGE = "storm.hibernateOGMTest.domain";
+	private static final String DEFAULT_TEST_PACKGE = "storm.hibernateOGMTest.domain";
 	private JoinedDataHandler handler;
+	private SQLBase sqlBase = new SQLBaseImpl();
+	private NoSQLHBaseBase noSqlBase = new NoSQLHBaseBaseImpl();
+	private Map<String, Boolean> sqlTableExist = new HashMap<>();
 
 	public MyGridDialect(MyDatastoreProvider provider) {
 		// super(provider);
@@ -49,26 +63,37 @@ public class MyGridDialect extends BaseGridDialect {
 	@Override
 	public Tuple getTuple(EntityKey key, TupleContext tupleContext) {
 		// TODO Auto-generated method stub
+		Class clazz;
+		boolean isHBaseTable = false, isMySqlTable = false;
+		String className = ((AbstractConfiguredSQLBase)sqlBase).getProperties().getProperty(DOMAIN_PACKAGE_NAME) + "." + key.getTable();
+		try {
+			clazz = Class.forName(className);
+			Annotation[] as = clazz.getAnnotations();
+			for (Annotation a : as) {
+				if (a instanceof HBase) {
+					isHBaseTable = true;
+					isMySqlTable = false;
+					break;
+				}
+				if (a instanceof MySql) {
+					isHBaseTable = false;
+					isMySqlTable = true;
+					break;
+				}
+			}
 
-		System.out.println(key.getMetadata().getClass());
-		System.out.println("getTuple:" + key.toString());
-		for (String s : key.getColumnNames())
-			System.out.println(s);
-		System.out.println(tupleContext.getAllRoles().toString());
-		System.out.println(tupleContext.getSelectableColumns());
-		System.out.println(tupleContext.getAllAssociatedEntityKeyMetadata().isEmpty());
-		if (key.getColumnValues()[0].equals("4334y-45rtg-435")) {
-			Tuple t = new Tuple();
-			t.put("age", 11);
-			t.put("master", "ldk");
-			t.put("name", "ww");
-			// List<String> list3 = new ArrayList<>();
-			// list3.add("info1");
-			// list3.add("info2");
-			// t.put("list3", list3);
-			return t;
-
+		} catch (ClassNotFoundException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+			throw new RuntimeException("ClassNotFoundException className:" + className);
 		}
+
+		if (isHBaseTable) {
+			return HandleNoSQLProcessGet(key, tupleContext);
+		} else if (isMySqlTable) {
+			return HandleSQLProcessGet(key, tupleContext);
+		}
+
 		return null;
 	}
 
@@ -88,48 +113,82 @@ public class MyGridDialect extends BaseGridDialect {
 	@Override
 	public void insertOrUpdateTuple(EntityKey key, Tuple tuple, TupleContext tupleContext) {
 		// TODO Auto-generated method stub
-
-		if (this.handler == null || !this.handler.isValid())
-			try {
-
-				Class<?> clazz = Class.forName("storm.hibernateOGMTest.domain." + key.getTable());
-				Set<String> familyNames = new HashSet<>();
-				for (Field f : clazz.getDeclaredFields()) {
-					System.out.println(f.getName());
-					if (!f.getName().equals("id"))
-						familyNames.add(f.getName());
+		System.out.println("----------------insertOrUpdateTuple----------------");
+		Class clazz;
+		boolean isHBaseTable = false, isMySqlTable = false;
+		for (String s : tuple.getColumnNames())
+			System.out.println(s + "  " + tuple.get(s));
+		String className = ((AbstractConfiguredSQLBase)sqlBase).getProperties().getProperty(DOMAIN_PACKAGE_NAME) + "." + key.getTable();
+		try {
+			//
+			
+			clazz = Class.forName(className);
+			Annotation[] as = clazz.getAnnotations();
+			for (Annotation a : as) {
+				if (a instanceof HBase) {
+					isHBaseTable = true;
+					isMySqlTable = false;
 				}
-				;
-				handler = new JoinedDataHandler(familyNames);
-				handler.setRowkey(key.getColumnValues()[0].toString());
-				handler.setValid(true);
-				handler.setTableName(key.getTable());
-			} catch (ClassNotFoundException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
+				if (a instanceof MySql) {
+					isHBaseTable = false;
+					isMySqlTable = true;
+				}
 			}
-		System.out.println("========enter insertOrUpdateTuple========");
-
-		System.out.println("insertOrUpdateTuple:");
-		Set<String> set = tuple.getColumnNames();
-
-		for (String s : set) {
-			String[] cor = s.split("[\\.]");
-			if (cor.length != 2)
-				continue;
-			String value = tuple.get(s).toString();
-			handler.addData(cor[0], cor[1], value);
+		} catch (ClassNotFoundException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+			throw new RuntimeException("class not found class name:" + className);
 		}
 
-		if (handler.isCompleted()) {
-			System.out.println("*****will send...*****");
-			System.out.println(handler.toString());
-
-			System.out.println("*****has sended!*****");
+		if (isHBaseTable) {
+			handleNoSQLProcessInsert(key, tuple,tupleContext);
+		} else if (isMySqlTable) {
+			handleSQLProcessInsert(key,tuple, tupleContext);
 		}
-		System.out.println(set);
 
-		System.out.println("========exit insertOrUpdateTuple========");
+		// if (this.handler == null || !this.handler.isValid())
+		// try {
+		//
+		// Class<?> clazz = Class.forName("storm.hibernateOGMTest.domain." +
+		// key.getTable());
+		// Set<String> familyNames = new HashSet<>();
+		// for (Field f : clazz.getDeclaredFields()) {
+		// System.out.println(f.getName());
+		// if (!f.getName().equals("id"))
+		// familyNames.add(f.getName());
+		// // f.getC
+		// }
+		// ;
+		// handler = new JoinedDataHandler(familyNames);
+		// handler.setRowkey(key.getColumnValues()[0].toString());
+		// handler.setValid(true);
+		// handler.setTableName(key.getTable());
+		// } catch (ClassNotFoundException e) {
+		// // TODO Auto-generated catch block
+		// e.printStackTrace();
+		// }
+		// System.out.println("========enter insertOrUpdateTuple========");
+		//
+		// System.out.println("insertOrUpdateTuple:");
+		// Set<String> set = tuple.getColumnNames();
+		//
+		// for (String s : set) {
+		// String[] cor = s.split("[\\.]");
+		// if (cor.length != 2)
+		// continue;
+		// String value = tuple.get(s).toString();
+		// handler.addData(cor[0], cor[1], value);
+		// }
+		//
+		// if (handler.isCompleted()) {
+		// System.out.println("*****will send...*****");
+		// System.out.println(handler.toString());
+		//
+		// System.out.println("*****has sended!*****");
+		// }
+		// System.out.println(set);
+		//
+		// System.out.println("========exit insertOrUpdateTuple========");
 		// super.insertOrUpdateTuple(key, tuple, tupleContext);
 	}
 
@@ -144,14 +203,15 @@ public class MyGridDialect extends BaseGridDialect {
 	@Override
 	public Association getAssociation(AssociationKey key, AssociationContext associationContext) {
 		// TODO Auto-generated method stub
-		System.out.println("========enter getAssociation========");
-		String id = null;
-		System.out.println(associationContext.getAssociationTypeContext().getRoleOnMainSide());
+		System.out.println("------------enter getAssociation--------");
+		Association association = new Association();
 
-		// Association association = new Association(new
-		// MyAssociationSnapshot());
+		System.out.println(key.toString());
+		System.out.println(associationContext.toString());
+		// RowKey rk = new RowKey(columnNames, columnValues)
+		// association.put(key, value);
 
-		System.out.println("========exit getAssociation========");
+		System.out.println("------------exit getAssociation-------------");
 
 		return new Association();
 	}
@@ -167,53 +227,35 @@ public class MyGridDialect extends BaseGridDialect {
 	public void insertOrUpdateAssociation(AssociationKey key, Association association,
 			AssociationContext associationContext) {
 		// TODO Auto-generated method stub
-		System.out.println("========enter insertOrUpdateAssociation========");
-		Iterable<RowKey> rowkeys = association.getKeys();
+		System.out.println("-----------------enter insertOrUpdateAssociation-------------");
 
-		Iterator<RowKey> rowkeyIterator = rowkeys.iterator();
-		while (rowkeyIterator.hasNext()) {
-			RowKey rk = rowkeyIterator.next();
-			System.out.println("------------tuple--------------");
-			Tuple t = association.get(rk);
-			String familyName = null, keyName = null, value = null;
-			for (String s : t.getColumnNames()) {
-				String[] ss = s.split("[\\.]");
-				familyName = ss[0];
-				if (ss[1].equals("key"))
-					keyName = t.get(s).toString();
-				else
-					value = t.get(s).toString();
+		System.out.println(association.toString());
 
-				// System.out.println(s + " " + );
-			}
-			System.out.println("family:" + familyName + " key:" + keyName + " value:" + value);
-			handler.addData(familyName, keyName, value);
-
-		}
-		System.out.println(handler.getFamilyNames());
-		System.out.println(handler.getFamilys().keySet());
-		if (handler.isCompleted()) {
-			System.out.println("*****will send...*****");
-			System.out.println(handler.toString());
-			NoSQLHBaseTableBase tableAdmin = null;
-			if (!this.hbaseAdmin.tableIsExist(handler.getTableName())) {
-				System.out.println(handler.getTableName()+ " exist...");
-				String[] columnFamily = new String[handler.getFamilyNames().size()];
-				 handler.getFamilyNames().toArray(columnFamily);
-				System.out.println(columnFamily.length);
-				tableAdmin = this.hbaseAdmin.createTable(handler.getTableName(), columnFamily);
-			}
-			
-			tableAdmin = this.hbaseAdmin.accessTable(handler.getTableName());
-			if (tableAdmin == null) {
-				System.out.println("send error...");
-			} else {
-				tableAdmin.insertData(handler.transfromToHBasePut());
-
-				System.out.println("*****has sended!*****");
-			}
-		}
-		System.out.println("========exit insertOrUpdateAssociation========");
+		// System.out.println(handler.getFamilyNames());
+		// System.out.println(handler.getFamilys().keySet());
+		// if (handler.isCompleted()) {
+		// System.out.println("*****will send...*****");
+		// System.out.println(handler.toString());
+		// NoSQLHBaseTableBase tableAdmin = null;
+		// if (!this.hbaseAdmin.tableIsExist(handler.getTableName())) {
+		// System.out.println(handler.getTableName()+ " exist...");
+		// String[] columnFamily = new String[handler.getFamilyNames().size()];
+		// handler.getFamilyNames().toArray(columnFamily);
+		// System.out.println(columnFamily.length);
+		// tableAdmin = this.hbaseAdmin.createTable(handler.getTableName(),
+		// columnFamily);
+		// }
+		//
+		// tableAdmin = this.hbaseAdmin.accessTable(handler.getTableName());
+		// if (tableAdmin == null) {
+		// System.out.println("send error...");
+		// } else {
+		// tableAdmin.insertData(handler.transfromToHBasePut());
+		//
+		// System.out.println("*****has sended!*****");
+		// }
+		// }
+		// System.out.println("========exit insertOrUpdateAssociation========");
 		// association.get()
 
 		// super.insertOrUpdateAssociation(key, association,
@@ -268,4 +310,98 @@ public class MyGridDialect extends BaseGridDialect {
 		String[] res = s.split("[\\.]");
 		System.out.println(res.length);
 	}
+
+	private Tuple HandleNoSQLProcessGet(EntityKey key, TupleContext context) {
+		NoSQLHBaseTableBase tableBase = noSqlBase.accessTable(key.getTable());
+		String rowkey = (String) key.getColumnValues()[0];
+		if (rowkey == null)
+			throw new RuntimeException("rowkey is null !");
+		Tuple tuple = new Tuple();
+		Result result = tableBase.query(rowkey);
+
+		for (String name : context.getSelectableColumns()) {
+
+			String[] splited = name.split("[\\.]");
+			if (splited.length != 2)
+				throw new RuntimeException("columnFamily or key is absent !");
+			String value = new String(
+					result.getColumnLatestCell(splited[0].getBytes(), splited[1].getBytes()).getValue());
+			tuple.put(name, value);
+			System.out.println("key:" + name + " value:" + value);
+		}
+		System.out.println(tuple.toString());
+		return tuple;
+	}
+
+	private void handleNoSQLProcessInsert(EntityKey key, Tuple tuple,TupleContext context) {
+
+	}
+
+	private Tuple HandleSQLProcessGet(EntityKey key, TupleContext context) {
+		String tableName = key.getTable();
+		if(!this.sqlTableExist.getOrDefault(tableName, false) || !sqlBase.checkExist(tableName)){
+			createIfNotExist(tableName);
+		}
+		String id = (String) key.getColumnValues()[0];
+		String sql = String.format("SELECT * FROM %s where id ='%s';",tableName,id);
+		Map<String ,Object> map = sqlBase.excuteQuery(tableName, sql);
+		Tuple tuple = new Tuple();
+		for(String s : context.getSelectableColumns()){
+			tuple.put(s, map.get(s));
+		}
+		
+		
+		return tuple;
+	}
+
+	private void handleSQLProcessInsert(EntityKey key, Tuple tuple,TupleContext tupleContext) {
+		String tableName = key.getTable();
+		createIfNotExist(tableName);
+		//INSERT INTO table_name (列1, 列2,...) VALUES (值1, 值2,....)
+		String sql = String.format("INSERT INTO %s(", tableName);
+		for(String column : tuple.getColumnNames()){
+			sql += column +",";
+		}
+		sql = sql .substring(0, sql.length() - 1);
+		sql += ") VALUES(";
+		
+		for(String column : tuple.getColumnNames()){
+			Object value = tuple.get(column);
+			sql += "'"+value.toString()+"',";
+		}
+		sql = sql.substring(0,sql.length() - 1);
+		sql += ");";
+	
+		
+		sqlBase.insert(tableName, sql);
+	}
+
+	private void createIfNotExist(String tableName) {
+		if (!sqlTableExist.getOrDefault(tableName, false) && !sqlBase.checkExist(tableName)) {
+			System.out.println("table " + tableName + "is not existed !");
+			String packageName = ((AbstractConfiguredSQLBase) sqlBase).getProperties().getProperty("packageName");
+			if (packageName == null)
+				packageName = DEFAULT_TEST_PACKGE;
+			String className = packageName + "." + tableName;
+			try {
+				Class clazz = Class.forName(className);
+				Field[] fields = clazz.getDeclaredFields();
+				String[] columns = new String[fields.length - 1];
+				for (int i = 0,j = 0; i < fields.length; i++){
+					if( fields[i].getName().equals("id"))
+						continue;
+					columns[j ++] =fields[i].getName();
+					
+				}
+				sqlBase.create(tableName, columns);
+			} catch (ClassNotFoundException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+				throw new RuntimeException("can not reflect class " + className);
+			}
+
+			this.sqlTableExist.put(tableName, true);
+		}
+	}
+
 }
